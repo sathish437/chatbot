@@ -1,0 +1,18 @@
+[
+  {
+    "keywords": ["password", "reset"],
+    "content": "To reset your password, go to Settings → click 'Forgot Password'."
+  },
+  {
+    "keywords": ["java"],
+    "content": "Java is a high-level programming language used for backend development."
+  },
+  {
+    "keywords": ["contact", "support", "email"],
+    "content": "You can reach our support team at support@example.com."
+  },
+  {
+    "keywords": ["hours", "open", "time"],
+    "content": "We are open Monday to Friday, 9 AM to 5 PM."
+  }
+]
