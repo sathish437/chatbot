@@ -16,18 +16,12 @@ if (!process.env.GEMINI_API_KEY) {
 // ✅ Debug (safe)
 console.log("🔑 API Key loaded:", !!process.env.GEMINI_API_KEY);
 
-// 🌐 CORS
-const corsOptions = {
-    origin: [
-        'https://chatbot-iwkx.onrender.com',
-        'http://localhost:5173',
-        'http://localhost:3000'
-    ],
+// 🌐 CORS - Allow all origins
+app.use(cors({
+    origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
+}));
 app.use(express.json());
 
 // 📦 Routes

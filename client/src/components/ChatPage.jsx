@@ -3,6 +3,8 @@ import axios from 'axios';
 import MessageBubble from './MessageBubble';
 import InputBar from './InputBar';
 
+const API_URL = import.meta.env.VITE_API_URL || '';
+
 const ChatPage = () => {
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -50,7 +52,7 @@ const ChatPage = () => {
         setIsLoading(true);
 
         try {
-            const response = await axios.post('/api/chat', { message: text });
+            const response = await axios.post(`${API_URL}/api/chat`, { message: text });
 
             const botMsg = {
                 id: Date.now() + 1,
