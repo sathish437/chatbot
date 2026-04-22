@@ -1,203 +1,126 @@
 const express = require("express");
 const router = express.Router();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 const systemPrompt = require("../config/prompt");
 const getContext = require("../utils/getContext");
 
 let chatHistory = [];
-let genAI = null;
-let model = null;
+let genAI;
+let model;
 
-// ✅ Initialize Gemini with error handling
-function initGemini() {
-    try {
-        const apiKey = process.env.GEMINI_API_KEY;
-        
-        if (!apiKey) {
-            console.error("❌ GEMINI_API_KEY is not set");
-            return false;
-        }
-        
-        if (!genAI) {
-            genAI = new GoogleGenerativeAI(apiKey);
-            // Try gemini-1.5-flash first, fallback to gemini-pro if needed
-            try {
-                model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                console.log("✅ Gemini initialized with gemini-1.5-flash");
-            } catch (modelErr) {
-                console.warn("⚠️ gemini-1.5-flash not available, trying gemini-pro");
-                model = genAI.getGenerativeModel({ model: "gemini-pro" });
-                console.log("✅ Gemini initialized with gemini-pro");
-            }
-        }
-        
-        return true;
-    } catch (err) {
-        console.error("❌ Failed to initialize Gemini:", err.message);
-        return false;
+// 🔥 Initialize Gemini (clean + stable)
+function getGeminiModel() {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY missing");
     }
-}
 
-// ✅ Get model (with initialization check)
-function getModel() {
-    if (!model) {
-        const success = initGemini();
-        if (!success) {
-            throw new Error("Gemini API not initialized - check GEMINI_API_KEY");
-        }
+    if (!genAI) {
+        genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // ✅ FIXED MODEL
+        console.log("✅ Gemini initialized (2.5-flash)");
     }
+
     return model;
 }
 
+// 🚀 MAIN CHAT ROUTE
 router.post("/", async (req, res) => {
-    const startTime = Date.now();
-    
+    const start = Date.now();
+
     try {
-        console.log("\n📩 ===== CHAT REQUEST =====");
-        console.log("⏰ Time:", new Date().toISOString());
-        
-        // 1. Validate request body
-        if (!req.body) {
-            console.error("❌ Request body is missing");
-            return res.status(400).json({ 
-                reply: "Invalid request: no body provided",
-                error: "Missing body" 
-            });
-        }
-        
-        if (typeof req.body.message !== 'string') {
-            console.error("❌ Message is not a string:", typeof req.body.message);
-            return res.status(400).json({ 
-                reply: "Invalid request: message must be a string",
-                error: "Invalid message type" 
-            });
-        }
-        
-        const userMsg = req.body.message.trim();
-        if (!userMsg) {
-            console.error("❌ Message is empty");
-            return res.status(400).json({ 
-                reply: "Please enter a message",
-                error: "Empty message" 
-            });
-        }
-        
-        console.log("📝 User message:", userMsg.substring(0, 100));
+        console.log("\n📩 New request:", req.body);
 
-        // 2. Save user message
-        chatHistory.push({ role: "user", content: userMsg });
-        
-        // Limit chat history to prevent token overflow
-        if (chatHistory.length > 20) {
-            chatHistory = chatHistory.slice(-20);
+        // ✅ Validate input
+        const userMsg = req.body?.message;
+        if (!userMsg || typeof userMsg !== "string") {
+            return res.status(400).json({
+                reply: "❌ Invalid message"
+            });
         }
 
-        // 3. Get context (with error handling)
+        const cleanMsg = userMsg.trim();
+
+        // ✅ Save history (limit)
+        chatHistory.push({ role: "user", content: cleanMsg });
+        chatHistory = chatHistory.slice(-10); // 🔥 optimized
+
+        // ✅ Context
         let context = "";
         try {
-            context = getContext(userMsg);
-            console.log("📚 Context found:", context ? "yes" : "no");
-        } catch (ctxErr) {
-            console.error("❌ getContext error (non-critical):", ctxErr.message);
-            context = "";
+            context = getContext(cleanMsg);
+        } catch (e) {
+            console.warn("Context error:", e.message);
         }
 
-        // 4. Build prompt
-        const priorConversation = chatHistory
-            .slice(0, -1)
+        // ✅ Build prompt (simple & safe)
+        const historyText = chatHistory
             .map(m => `${m.role}: ${m.content}`)
             .join("\n");
-            
-        const fullPrompt = `${systemPrompt}
 
-Context Data:
+        const fullPrompt = `
+${systemPrompt}
+
+Context:
 ${context || "None"}
 
-Prior Conversation:
-${priorConversation}
+Conversation:
+${historyText}
 
-User: ${userMsg}
-Assistant:`;
+User: ${cleanMsg}
+Assistant:
+        `;
 
-        console.log("🤖 Calling Gemini API...");
+        console.log("🤖 Calling Gemini...");
 
-        // 5. Call Gemini with timeout and error handling
-        const geminiModel = getModel();
-        
-        const result = await geminiModel.generateContent({
-            contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-            generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 1000,
-            }
-        });
-        
-        // Extract response text safely
-        let reply = "";
-        try {
-            reply = result.response.text();
-        } catch (textErr) {
-            console.error("❌ Error extracting response text:", textErr.message);
-            reply = "I'm sorry, I couldn't generate a proper response. Please try again.";
+        const gemini = getGeminiModel();
+
+        // 🔥 SIMPLIFIED API CALL (LESS ERROR)
+        const result = await gemini.generateContent(fullPrompt);
+
+        const response = await result.response;
+        const reply = response.text();
+
+        if (!reply) {
+            throw new Error("Empty response from Gemini");
         }
-        
-        if (!reply || reply.trim() === "") {
-            reply = "I apologize, but I couldn't formulate a response. Could you rephrase your question?";
-        }
-        
-        console.log("✅ Gemini response length:", reply.length);
 
-        // 6. Save bot reply
+        // ✅ Save reply
         chatHistory.push({ role: "assistant", content: reply });
 
-        // 7. Send response
-        const duration = Date.now() - startTime;
-        console.log("⏱️ Request completed in", duration, "ms\n");
-        
+        console.log("✅ Response OK:", reply.substring(0, 60));
+
         res.json({ reply });
 
     } catch (err) {
-        const duration = Date.now() - startTime;
-        console.error("\n❌ ===== CHAT ERROR =====");
-        console.error("⏱️ Duration:", duration, "ms");
-        console.error("Type:", err.constructor.name);
-        console.error("Message:", err.message);
-        
-        if (err.message && err.message.includes("API key not valid")) {
-            console.error("🔑 API Key Error: The GEMINI_API_KEY is invalid or revoked");
+        console.error("🔥 ERROR:", err);
+
+        let message = "⚠️ Server error. Please try again.";
+
+        if (err.message.includes("API_KEY")) {
+            message = "⚠️ API key issue. Contact admin.";
         }
-        if (err.message && err.message.includes("model")) {
-            console.error("🤖 Model Error: The Gemini model may not be available");
+
+        if (err.message.includes("model")) {
+            message = "⚠️ AI model unavailable.";
         }
-        
-        // Don't expose internal details to client
-        let userMessage = "Sorry, I encountered an error. Please try again in a moment.";
-        
-        if (process.env.NODE_ENV === 'development') {
-            userMessage += ` (Debug: ${err.message})`;
-        }
-        
-        res.status(500).json({ 
-            reply: userMessage,
-            error: process.env.NODE_ENV === 'development' ? err.message : "Internal error"
-        });
+
+        res.status(500).json({ reply: message });
     }
 });
 
-// ✅ Health check for chat route
+// ✅ STATUS
 router.get("/status", (req, res) => {
-    const initialized = initGemini();
     res.json({
-        status: initialized ? "ready" : "not_ready",
         geminiConfigured: !!process.env.GEMINI_API_KEY,
-        chatHistoryLength: chatHistory.length
+        history: chatHistory.length
     });
 });
 
-// ✅ Clear chat history (useful for testing)
+// ✅ CLEAR CHAT
 router.post("/clear", (req, res) => {
     chatHistory = [];
-    res.json({ reply: "Chat history cleared. How can I help you?" });
+    res.json({ reply: "Chat cleared" });
 });
 
 module.exports = router;
