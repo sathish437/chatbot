@@ -18,6 +18,15 @@ function getModel() {
 
 router.post("/", async (req, res) => {
     try {
+        // Check API key is available
+        if (!process.env.GEMINI_API_KEY) {
+            console.error("❌ GEMINI_API_KEY not available in this request");
+            return res.status(500).json({ 
+                reply: "Server configuration error: API key not set",
+                error: "GEMINI_API_KEY missing" 
+            });
+        }
+        
         const userMsg = req.body.message;
 
         // Save user message
@@ -43,8 +52,13 @@ router.post("/", async (req, res) => {
         }, 800);
 
     } catch (err) {
-        console.error("❌ Chat error:", err.message);
-        res.status(500).json({ reply: "Sorry, I encountered an error. Please try again." });
+        console.error("❌ Chat error:");
+        console.error("Message:", err.message);
+        console.error("Stack:", err.stack);
+        res.status(500).json({ 
+            reply: "Sorry, I encountered an error. Please try again.",
+            error: err.message 
+        });
     }
 });
 

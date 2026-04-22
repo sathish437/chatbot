@@ -8,13 +8,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // 🔐 Validate API Key at startup
-if (!process.env.GEMINI_API_KEY) {
-    console.error("❌ GEMINI_API_KEY missing in server/.env");
-    process.exit(1);
-}
+console.log("🔍 Checking environment...");
+console.log("🔍 NODE_ENV:", process.env.NODE_ENV);
+console.log("🔍 PORT:", process.env.PORT);
+console.log("🔍 GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
+console.log("� GEMINI_API_KEY length:", process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0);
 
-// ✅ Debug (safe)
-console.log("🔑 API Key loaded:", !!process.env.GEMINI_API_KEY);
+if (!process.env.GEMINI_API_KEY) {
+    console.error("❌ GEMINI_API_KEY missing! Server will start but chat will fail.");
+}
 
 // 🌐 CORS - Allow all origins
 app.use(cors({
